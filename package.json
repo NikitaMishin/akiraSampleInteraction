@@ -1,0 +1,25 @@
+{
+  "name": "@layerakira/sample",
+  "private": true,
+  "version": "0.0.1",
+  "main": "main.js",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "author": "Nikita Mishin",
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "ts-node": "^10.9.1",
+    "tsup": "^7.1.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.1.6",
+    "vite": "5.4.6"
+  },
+  "dependencies": {
+    "ethers": "^6.11.1",
+    "layerakira-js": "1.0.1-beta.26",
+    "starknet": "6.17.0"
+  }
+}
