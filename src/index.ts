@@ -3,6 +3,8 @@ import { authenticateAccount } from "./auth";
 import { Account, OutsideExecutionVersion, Signer } from "starknet";
 import {
   CHAIN_ID,
+  coreAddress,
+  coreContract,
   CURRENCIES,
   executorContract,
   rollupInvoker,
@@ -144,7 +146,11 @@ const swapPipeline = async (
     ) {
       approvals.push([gasFee.fee_token, totalGas]);
     }
-
+    // check if client already approved executor
+    const is_approved_executor = await coreContract.call(
+      "is_approved_executor",
+      [clientAccount.address.toString()],
+    );
     // dont forget in real code to check snip9 version that supported by wallet of user
     const execOutsidePrimitives = SDK.buildExecuteOutsidePrimitives(
       executorContract,
@@ -158,6 +164,10 @@ const swapPipeline = async (
       routerSignatureResult.result!,
       approvals,
       rollupInvoker,
+      undefined,
+      undefined,
+      !is_approved_executor,
+      coreAddress,
     );
     // normally you need check what snip0 revision is supported
     order.snip9_call = await SDK.buildOutsideExecuteTransaction(
@@ -269,8 +279,7 @@ rl.on("line", (line: string) => {
   }
 
   // just a dummy example how one can get txHash of the executed order onchain through TradeEvent
-  // we have indexer in-progress as well
-  // and extra event for ws -> to fire event to simplify router logic
+  // there is also an wss event which fire tx hash where  taker order was settled
   if (line.startsWith("queryTransactionByOrderHash")) {
     // queryTransactionByOrderHash <orderHash>
     let [_, orderHash] = line.split(" ");
