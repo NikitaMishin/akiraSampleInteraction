@@ -2,6 +2,7 @@ import { Address } from "layerakira-js";
 import { Currency } from "./types";
 import { Account, Contract, RpcProvider } from "starknet";
 import executorAbi from "./abi/executor.json";
+import coreAbi from "./abi/core.json";
 import { OurSigner } from "./signer";
 
 export const baseHttpApiUrl = "https://api-testnet.layerakira.xyz";
@@ -81,16 +82,10 @@ export const executorContract = new Contract(
   executorAddress,
   rpcProvider,
 );
+export const coreContract = new Contract(coreAbi, coreAddress, rpcProvider);
 
-export const routerFeeRecipient =
-  "TODO";
+export const routerFeeRecipient = "TODO";
 // Account that router would use to listen on events and submitting orders
-export const routerAccount = new Account(
-  rpcProvider,
-  "TODO",
-  "TODO",
-);
+export const routerAccount = new Account(rpcProvider, "TODO", "TODO");
 // only needs to be specified if you plan to use option 2
-export const routerSigner = new OurSigner(
-  "TODO",
-);
+export const routerSigner = new OurSigner("TODO");
