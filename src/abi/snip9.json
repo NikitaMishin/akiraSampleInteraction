@@ -1,0 +1,494 @@
+[
+  {
+    "name": "constructor",
+    "type": "constructor",
+    "inputs": [
+      {
+        "name": "base_executor_address",
+        "type": "core::starknet::contract_address::ContractAddress"
+      }
+    ]
+  },
+  {
+    "name": "core::integer::u256",
+    "type": "struct",
+    "members": [
+      {
+        "name": "low",
+        "type": "core::integer::u128"
+      },
+      {
+        "name": "high",
+        "type": "core::integer::u128"
+      }
+    ]
+  },
+  {
+    "name": "kurosawa_akira::Order::Quantity",
+    "type": "struct",
+    "members": [
+      {
+        "name": "base_qty",
+        "type": "core::integer::u256"
+      },
+      {
+        "name": "quote_qty",
+        "type": "core::integer::u256"
+      },
+      {
+        "name": "base_asset",
+        "type": "core::integer::u256"
+      }
+    ]
+  },
+  {
+    "name": "kurosawa_akira::Fees::FixedFee",
+    "type": "struct",
+    "members": [
+      {
+        "name": "recipient",
+        "type": "core::starknet::contract_address::ContractAddress"
+      },
+      {
+        "name": "maker_pbips",
+        "type": "core::integer::u32"
+      },
+      {
+        "name": "taker_pbips",
+        "type": "core::integer::u32"
+      }
+    ]
+  },
+  {
+    "name": "core::bool",
+    "type": "enum",
+    "variants": [
+      {
+        "name": "False",
+        "type": "()"
+      },
+      {
+        "name": "True",
+        "type": "()"
+      }
+    ]
+  },
+  {
+    "name": "kurosawa_akira::Fees::GasFee",
+    "type": "struct",
+    "members": [
+      {
+        "name": "gas_per_action",
+        "type": "core::integer::u32"
+      },
+      {
+        "name": "fee_token",
+        "type": "core::starknet::contract_address::ContractAddress"
+      },
+      {
+        "name": "max_gas_price",
+        "type": "core::integer::u256"
+      },
+      {
+        "name": "conversion_rate",
+        "type": "(core::integer::u256, core::integer::u256)"
+      }
+    ]
+  },
+  {
+    "name": "kurosawa_akira::Order::OrderFee",
+    "type": "struct",
+    "members": [
+      {
+        "name": "trade_fee",
+        "type": "kurosawa_akira::Fees::FixedFee"
+      },
+      {
+        "name": "router_fee",
+        "type": "kurosawa_akira::Fees::FixedFee"
+      },
+      {
+        "name": "integrator_fee",
+        "type": "kurosawa_akira::Fees::FixedFee"
+      },
+      {
+        "name": "apply_to_receipt_amount",
+        "type": "core::bool"
+      },
+      {
+        "name": "gas_fee",
+        "type": "kurosawa_akira::Fees::GasFee"
+      }
+    ]
+  },
+  {
+    "name": "kurosawa_akira::Order::TakerSelfTradePreventionMode",
+    "type": "enum",
+    "variants": [
+      {
+        "name": "NONE",
+        "type": "()"
+      },
+      {
+        "name": "EXPIRE_TAKER",
+        "type": "()"
+      },
+      {
+        "name": "EXPIRE_MAKER",
+        "type": "()"
+      },
+      {
+        "name": "EXPIRE_BOTH",
+        "type": "()"
+      }
+    ]
+  },
+  {
+    "name": "kurosawa_akira::Order::Constraints",
+    "type": "struct",
+    "members": [
+      {
+        "name": "number_of_swaps_allowed",
+        "type": "core::integer::u16"
+      },
+      {
+        "name": "duration_valid",
+        "type": "core::integer::u32"
+      },
+      {
+        "name": "created_at",
+        "type": "core::integer::u32"
+      },
+      {
+        "name": "stp",
+        "type": "kurosawa_akira::Order::TakerSelfTradePreventionMode"
+      },
+      {
+        "name": "nonce",
+        "type": "core::integer::u32"
+      },
+      {
+        "name": "min_receive_amount",
+        "type": "core::integer::u256"
+      },
+      {
+        "name": "router_signer",
+        "type": "core::starknet::contract_address::ContractAddress"
+      }
+    ]
+  },
+  {
+    "name": "kurosawa_akira::Order::OrderFlags",
+    "type": "struct",
+    "members": [
+      {
+        "name": "full_fill_only",
+        "type": "core::bool"
+      },
+      {
+        "name": "best_level_only",
+        "type": "core::bool"
+      },
+      {
+        "name": "post_only",
+        "type": "core::bool"
+      },
+      {
+        "name": "is_sell_side",
+        "type": "core::bool"
+      },
+      {
+        "name": "is_market_order",
+        "type": "core::bool"
+      },
+      {
+        "name": "to_ecosystem_book",
+        "type": "core::bool"
+      },
+      {
+        "name": "external_funds",
+        "type": "core::bool"
+      }
+    ]
+  },
+  {
+    "name": "kurosawa_akira::Order::Order",
+    "type": "struct",
+    "members": [
+      {
+        "name": "maker",
+        "type": "core::starknet::contract_address::ContractAddress"
+      },
+      {
+        "name": "price",
+        "type": "core::integer::u256"
+      },
+      {
+        "name": "qty",
+        "type": "kurosawa_akira::Order::Quantity"
+      },
+      {
+        "name": "ticker",
+        "type": "(core::starknet::contract_address::ContractAddress, core::starknet::contract_address::ContractAddress)"
+      },
+      {
+        "name": "fee",
+        "type": "kurosawa_akira::Order::OrderFee"
+      },
+      {
+        "name": "constraints",
+        "type": "kurosawa_akira::Order::Constraints"
+      },
+      {
+        "name": "salt",
+        "type": "core::felt252"
+      },
+      {
+        "name": "flags",
+        "type": "kurosawa_akira::Order::OrderFlags"
+      },
+      {
+        "name": "source",
+        "type": "core::felt252"
+      },
+      {
+        "name": "sign_scheme",
+        "type": "core::felt252"
+      }
+    ]
+  },
+  {
+    "name": "placeTakerOrder",
+    "type": "function",
+    "inputs": [
+      {
+        "name": "order",
+        "type": "kurosawa_akira::Order::Order"
+      },
+      {
+        "name": "router_sign",
+        "type": "(core::felt252, core::felt252)"
+      }
+    ],
+    "outputs": [],
+    "state_mutability": "external"
+  },
+  {
+    "name": "core::array::Span::<core::felt252>",
+    "type": "struct",
+    "members": [
+      {
+        "name": "snapshot",
+        "type": "@core::array::Array::<core::felt252>"
+      }
+    ]
+  },
+  {
+    "name": "kurosawa_akira::Order::SignedOrder",
+    "type": "struct",
+    "members": [
+      {
+        "name": "order",
+        "type": "kurosawa_akira::Order::Order"
+      },
+      {
+        "name": "sign",
+        "type": "core::array::Span::<core::felt252>"
+      },
+      {
+        "name": "router_sign",
+        "type": "(core::felt252, core::felt252)"
+      }
+    ]
+  },
+  {
+    "name": "fullfillTakerOrder",
+    "type": "function",
+    "inputs": [
+      {
+        "name": "maker_orders",
+        "type": "core::array::Array::<(kurosawa_akira::Order::SignedOrder, core::integer::u256)>"
+      },
+      {
+        "name": "total_amount_matched",
+        "type": "core::integer::u256"
+      },
+      {
+        "name": "gas_steps",
+        "type": "core::integer::u32"
+      },
+      {
+        "name": "gas_price",
+        "type": "core::integer::u256"
+      }
+    ],
+    "outputs": [],
+    "state_mutability": "external"
+  },
+  {
+    "name": "kurosawa_akira::Order::SimpleOrder",
+    "type": "struct",
+    "members": [
+      {
+        "name": "price",
+        "type": "core::integer::u256"
+      },
+      {
+        "name": "base_asset",
+        "type": "core::integer::u256"
+      },
+      {
+        "name": "ticker",
+        "type": "(core::starknet::contract_address::ContractAddress, core::starknet::contract_address::ContractAddress)"
+      },
+      {
+        "name": "is_sell_side",
+        "type": "core::bool"
+      }
+    ]
+  },
+  {
+    "name": "kurosawa_akira::SORLayerAkiraExecutor::SORDetails",
+    "type": "struct",
+    "members": [
+      {
+        "name": "lead_qty",
+        "type": "kurosawa_akira::Order::Quantity"
+      },
+      {
+        "name": "last_qty",
+        "type": "kurosawa_akira::Order::Quantity"
+      },
+      {
+        "name": "trade_fee",
+        "type": "kurosawa_akira::Fees::FixedFee"
+      },
+      {
+        "name": "router_fee",
+        "type": "kurosawa_akira::Fees::FixedFee"
+      },
+      {
+        "name": "integrator_fee",
+        "type": "kurosawa_akira::Fees::FixedFee"
+      },
+      {
+        "name": "apply_to_receipt_amount",
+        "type": "core::bool"
+      },
+      {
+        "name": "gas_fee",
+        "type": "kurosawa_akira::Fees::GasFee"
+      },
+      {
+        "name": "created_at",
+        "type": "core::integer::u32"
+      },
+      {
+        "name": "source",
+        "type": "core::felt252"
+      },
+      {
+        "name": "allow_nonatomic",
+        "type": "core::bool"
+      },
+      {
+        "name": "to_ecosystem_book",
+        "type": "core::bool"
+      },
+      {
+        "name": "duration_valid",
+        "type": "core::integer::u32"
+      },
+      {
+        "name": "nonce",
+        "type": "core::integer::u32"
+      },
+      {
+        "name": "external_funds",
+        "type": "core::bool"
+      },
+      {
+        "name": "router_signer",
+        "type": "core::starknet::contract_address::ContractAddress"
+      },
+      {
+        "name": "salt",
+        "type": "core::felt252"
+      },
+      {
+        "name": "sign_scheme",
+        "type": "core::felt252"
+      },
+      {
+        "name": "number_of_swaps_allowed",
+        "type": "core::integer::u16"
+      },
+      {
+        "name": "min_receive_amount",
+        "type": "core::integer::u256"
+      },
+      {
+        "name": "max_spend_amount",
+        "type": "core::integer::u256"
+      }
+    ]
+  },
+  {
+    "name": "placeSORTakerOrder",
+    "type": "function",
+    "inputs": [
+      {
+        "name": "orchestrate_order",
+        "type": "kurosawa_akira::Order::SimpleOrder"
+      },
+      {
+        "name": "path",
+        "type": "core::array::Array::<kurosawa_akira::Order::SimpleOrder>"
+      },
+      {
+        "name": "router_signature",
+        "type": "(core::felt252, core::felt252)"
+      },
+      {
+        "name": "details",
+        "type": "kurosawa_akira::SORLayerAkiraExecutor::SORDetails"
+      }
+    ],
+    "outputs": [],
+    "state_mutability": "external"
+  },
+  {
+    "name": "fulfillSORAtomic",
+    "type": "function",
+    "inputs": [
+      {
+        "name": "makers_orders",
+        "type": "core::array::Array::<(kurosawa_akira::Order::SignedOrder, core::integer::u256)>"
+      },
+      {
+        "name": "total_amount_matched_and_len",
+        "type": "core::array::Array::<(core::integer::u256, core::integer::u8)>"
+      },
+      {
+        "name": "gas_steps",
+        "type": "core::integer::u32"
+      },
+      {
+        "name": "gas_price",
+        "type": "core::integer::u256"
+      },
+      {
+        "name": "sor_id",
+        "type": "core::felt252"
+      }
+    ],
+    "outputs": [],
+    "state_mutability": "external"
+  },
+  {
+    "kind": "enum",
+    "name": "kurosawa_akira::SORLayerAkiraExecutor::SORLayerAkiraExecutor::Event",
+    "type": "event",
+    "variants": []
+  }
+]
