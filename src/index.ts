@@ -6,6 +6,7 @@ import {
   coreAddress,
   coreContract,
   CURRENCIES,
+  executorAddress,
   executorContract,
   rollupInvoker,
   routerAccount,
@@ -29,6 +30,11 @@ import { Currency } from "./types";
 import * as SDK from "layerakira-js";
 import { bigIntReplacer } from "layerakira-js/dist/api/http/utils";
 import { ERC20Token } from "layerakira-js/src/request_types";
+import { SorTaker } from "./sor";
+import {
+  fetchTickerSnapshots,
+  SnapshotPathProvider,
+} from "./snapshot/PathProvider";
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -40,6 +46,8 @@ export const routerSDK = spinSDKClient((arg: any) => console.log(arg));
 
 let orderBuilder: OrderConstructor;
 let tickerSpec: Array<TickerSpecification>;
+let sorTaker: SorTaker;
+export let snapshotProvider: SnapshotPathProvider<SDK.Snapshot>;
 
 const setupRouterSDK = async (
   execReportHandler: (report: ExecutionReport) => void,
@@ -62,11 +70,28 @@ const setupRouterSDK = async (
   orderBuilder = await initializeOrderBuilder(routerSDK);
 };
 
+const setUpSorTaker = async () => {
+  // making sure that put necessary tokens in the snapshot path provider for sor snapshots
+  const tokens = new Set<string>();
+  for (const ticker of tickerSpec) {
+    tokens.add(ticker.ticker.pair.base);
+    tokens.add(ticker.ticker.pair.quote);
+  }
+  snapshotProvider = new SnapshotPathProvider<SDK.Snapshot>(
+    Array.from(tokens),
+    4,
+  );
+  await fetchTickerSnapshots(routerSDK, tickerSpec);
+  sorTaker = new SorTaker(orderBuilder, console.log);
+};
+
 setupRouterSDK((e) =>
   console.log(
     `Parsed evt: ${getTakerOrderStatus(e)}\n : ${JSON.stringify(e, bigIntReplacer)}`,
   ),
-);
+).then(() => {
+  setUpSorTaker();
+});
 
 const swapPipeline = async (
   payCurrency: Currency,
@@ -137,14 +162,14 @@ const swapPipeline = async (
       BigInt(order.constraints.number_of_swaps_allowed) *
       SDK.getGasFeeAndCoin(gasFee, (gasPrice * 105n) / 100n, "STRK", 250)[0];
 
-    const approvals: [[ERC20Token, bigint]] = [
-      [payCurrency.code as string, requiredApproveToSpend],
+    const approvals: [[ERC20Token, bigint, string]] = [
+      [payCurrency.code as string, requiredApproveToSpend, executorAddress],
     ];
     if (
       gasTokenCurrency.code != payCurrency.code &&
       gasTokenCurrency.code != receiveCurrency.code
     ) {
-      approvals.push([gasFee.fee_token, totalGas]);
+      approvals.push([gasFee.fee_token, totalGas, executorAddress]);
     }
     // check if client already approved executor
     const is_approved_executor = await coreContract.call(
@@ -166,8 +191,8 @@ const swapPipeline = async (
       rollupInvoker,
       undefined,
       undefined,
+      //@ts-ignore
       !is_approved_executor,
-      coreAddress,
     );
     // normally you need check what snip0 revision is supported
     order.snip9_call = await SDK.buildOutsideExecuteTransaction(
@@ -219,6 +244,59 @@ rl.on("line", (line: string) => {
     clientAccount = new Account(rpcProvider, account, new Signer(pk));
     clientNonce = parseInt(nonce);
   }
+
+  // List all the avaiable sor paths for this cli
+  if (line.startsWith("list_sor_path")) {
+    sorTaker.listSorPaths();
+  }
+
+  // samples:
+  // place_sor STRK 1 AETH 0.147 10 STRK true true
+  // place_sor STRK 1 AUSDT 0.147 10 STRK true true
+  // place_sor AAAVE 1 AETH 0.147 10 AETH true true
+  if (line.startsWith("place_sor")) {
+    let [
+      _,
+      payCode,
+      payAmount,
+      receiveCode,
+      receiveAmount,
+      slippageBips,
+      gasTokenCode,
+      useNativeRouter,
+      externalFunds,
+    ] = line.split(" ");
+    const [payCurrency, receiveCurrency, gasCurrency] = [
+      CURRENCIES[payCode],
+      CURRENCIES[receiveCode],
+      CURRENCIES[gasTokenCode],
+    ];
+    let tweakedField: "pay" | "receive" =
+      formattedDecimalToBigInt(payAmount, payCurrency.unit) > 0n
+        ? "pay"
+        : "receive";
+    const nativeRouter = useNativeRouter.trim().toLowerCase() == "true";
+    sorTaker
+      .placeSorOrder(
+        routerSDK,
+        payCurrency,
+        receiveCurrency,
+        gasCurrency,
+        payAmount,
+        receiveAmount,
+        tweakedField,
+        tickerSpec,
+        clientAccount,
+        clientNonce,
+        externalFunds.trim().toLowerCase() == "true",
+        nativeRouter,
+        parseInt(slippageBips),
+      )
+      .then((hash) => {
+        console.log(`Order hash: ${hash}`);
+      });
+  }
+
   // samples:
   // swap AETH 0.1 AUSDC 0 10 AETH true true
   // swap AUSDC 50 AUSDC 0 10 AETH true true
