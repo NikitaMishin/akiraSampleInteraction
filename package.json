@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "ethers": "^6.11.1",
-    "layerakira-js": "1.0.1-beta.28",
+    "layerakira-js": "1.0.1-test.38",
     "starknet": "6.17.0"
   }
 }
