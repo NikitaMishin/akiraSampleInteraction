@@ -1,13 +1,6 @@
-// this file would change
-
 import * as SDK from "layerakira-js";
 
-import {
-  Address,
-  LayerAkiraSDK,
-  OrderConstructor,
-  SignScheme,
-} from "layerakira-js";
+import { Address, LayerAkiraSDK, SignScheme } from "layerakira-js";
 import {
   exchangeFeeRecipient,
   routerFeeRecipient,
@@ -16,7 +9,6 @@ import {
 } from "./constants";
 import { ExchangeTicker } from "layerakira-js/src/api";
 import { FeeTuple } from "layerakira-js/src/response_types";
-import { Settlement } from "./settlement";
 
 export const initializeOrderBuilder = async (
   sdk: LayerAkiraSDK,
@@ -52,57 +44,5 @@ export const initializeOrderBuilder = async (
     await routerSigner.getPubKey(),
     routerFeeRecipient,
     SignScheme.ACCOUNT,
-  );
-};
-
-interface BuildOrderParams {
-  settlement: Settlement;
-  ticker: SDK.ExchangeTicker;
-  gasPrice: bigint;
-  gasFeeToken: string;
-  gasConversionRate: [bigint, bigint];
-  chainHexCode: string;
-  accountAddress: string;
-  priceTick: bigint;
-  orderBuilder: OrderConstructor;
-  nonce: number;
-  signScheme: SignScheme;
-}
-
-export const buildOrder = ({
-  settlement,
-  ticker,
-  gasPrice,
-  gasFeeToken,
-  gasConversionRate,
-  orderBuilder,
-  priceTick,
-  nonce,
-  accountAddress,
-  signScheme,
-}: BuildOrderParams): SDK.Order => {
-  // here we a bit adjust since we control fills by min receive
-  const protectionPrice =
-    ((settlement.side == SDK.OrderSide.BUY
-      ? (settlement.protectionPrice * 120n) / 100n
-      : (settlement.protectionPrice * 80n) / 100n) /
-      priceTick) *
-    priceTick;
-
-  return orderBuilder!.buildSimpleRouterSwap(
-    ticker.pair,
-    protectionPrice,
-    settlement.quantity,
-    settlement.numTrades,
-    settlement.side,
-    gasPrice,
-    true,
-    settlement.minReceiveAmount,
-    gasFeeToken,
-    gasConversionRate,
-    undefined,
-    nonce,
-    signScheme,
-    accountAddress,
   );
 };

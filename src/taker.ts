@@ -12,8 +12,8 @@ import {
 } from "./constants";
 import { Currency } from "./types";
 import * as SDK from "layerakira-js";
-import { formattedDecimalToBigInt, getTickerSpec } from "./utils";
-import { queryGasRelated } from "./swap";
+import { getTickerSpec } from "./utils";
+import { queryGasRelated } from "./lib";
 import { Account, OutsideExecutionVersion } from "starknet";
 import { calcOrderHashAndTypedData, signOrder } from "./signer";
 import { getSnapshot } from "./snapshot";
@@ -21,7 +21,10 @@ import { estimateSettlementComplex } from "./settlement";
 import { CalcCommand, Settlement } from "./settlement/model";
 import { SOR_PATH } from "./sorPath";
 
-export class SorTaker {
+/**
+ * Capable of building and signing simple router order and sor order based on the snapshot path provided by the provider
+ */
+export class TakerCli {
   private tokenDecimals: SDK.ERCToDecimalsMap;
   private orderBuilder: SDK.OrderConstructor;
   private logger: (arg: unknown) => void;
@@ -47,7 +50,7 @@ export class SorTaker {
     });
   }
 
-  private buildSORORder(
+  private buildOrder(
     settlement: Settlement,
     trader: SDK.Address,
     clientNonce: number,
@@ -58,7 +61,13 @@ export class SorTaker {
     gasConversionRate: [bigint, bigint],
     gasTokenCurrency: Currency,
     tickerSpecs: SDK.TickerSpecification[],
+    isSor: boolean,
+    snip9: boolean,
   ): SDK.Order {
+    let signScheme =
+      (snip9 && externalFunds) || isSor
+        ? SDK.SignScheme.DIRECT
+        : SDK.SignScheme.ACCOUNT;
     const gasPriceSkewed = (100n * gasPrice!) / 100n;
 
     const fstSettle = settlement?.subSettlements?.at(0) ?? settlement;
@@ -91,7 +100,7 @@ export class SorTaker {
         gasConversionRate,
         undefined,
         clientNonce,
-        SDK.SignScheme.DIRECT,
+        signScheme,
         trader,
       );
       if (order.constraints.min_receive_amount != 0n) {
@@ -165,7 +174,7 @@ export class SorTaker {
       gasConversionRate,
       undefined,
       clientNonce,
-      SDK.SignScheme.DIRECT,
+      signScheme,
       trader,
       !isExactSell
         ? lastSettle.quantity
@@ -224,7 +233,7 @@ export class SorTaker {
     return order;
   }
 
-  public async placeSorOrder(
+  public async placeTakerOrder(
     routerSDK: SDK.LayerAkiraSDK,
     payCurrency: Currency,
     receiveCurrency: Currency,
@@ -235,18 +244,11 @@ export class SorTaker {
     tickerSpecs: SDK.TickerSpecification[],
     clientAccount: Account,
     clientNonce: number,
+    snip9: boolean = true,
     externalFunds: boolean = true,
     useNativeRouter: boolean = true,
     slippageBips: number = 100,
   ): Promise<string> {
-    const payAmountBigInt = formattedDecimalToBigInt(
-      payAmount,
-      this.tokenDecimals[payCurrency.code],
-    );
-    const receiveAmountBigInt = formattedDecimalToBigInt(
-      receiveAmount,
-      this.tokenDecimals[receiveCurrency.code],
-    );
     let [gasPrice, gasConversionRate] = await queryGasRelated(
       routerSDK,
       gasTokenCurrency.code,
@@ -275,7 +277,11 @@ export class SorTaker {
       tickerSpecs,
     });
 
-    const order = this.buildSORORder(
+    const sor =
+      settlement.subSettlements !== undefined &&
+      settlement.subSettlements.length > 0;
+
+    const order = this.buildOrder(
       settlement,
       clientAccount.address,
       clientNonce,
@@ -286,6 +292,8 @@ export class SorTaker {
       gasConversionRate,
       gasTokenCurrency,
       tickerSpecs,
+      sor,
+      snip9,
     );
 
     return await this.signAndPlaceOrder(
@@ -297,7 +305,10 @@ export class SorTaker {
       routerSDK,
       gasTokenCurrency,
       gasPrice,
+      externalFunds,
+      snip9,
       useNativeRouter,
+      sor,
     );
   }
 
@@ -310,11 +321,16 @@ export class SorTaker {
     routerSDK: SDK.LayerAkiraSDK,
     gasTokenCurrency: Currency,
     gasPrice: bigint,
+    externalFunds: boolean,
+    snip9: boolean,
     useNativeRouter: boolean,
+    sor: boolean,
   ): Promise<string> {
+    let sign: SDK.TraderSignature = ["0x0", "0x0"];
+
     let routerSignatureResult: SDK.Result<[string, string]>;
 
-    const [orderHash, _orderTypedData] = calcOrderHashAndTypedData(
+    const [orderHash, orderTypedData] = calcOrderHashAndTypedData(
       clientAccount!,
       order,
       `${CHAIN_ID}`,
@@ -332,87 +348,90 @@ export class SorTaker {
       };
     }
 
-    // here we are building snip9 order
-    // a bit more just to avoid any problem with rounding
-    const gasFee = order.fee.gas_fee;
-    const requiredApproveToSpend = (105n * settlement.spendSlippaged) / 100n;
-    // make some premium
-    const totalGas =
-      BigInt(order.constraints.number_of_swaps_allowed) *
-      SDK.getGasFeeAndCoin(gasFee, (gasPrice * 105n) / 100n, "STRK", 250)[0];
+    if ((snip9 && externalFunds) || sor) {
+      // here we are building snip9 order
+      // a bit more just to avoid any problem with rounding
+      const gasFee = order.fee.gas_fee;
+      const requiredApproveToSpend = (105n * settlement.spendSlippaged) / 100n;
+      // make some premium
+      const totalGas =
+        BigInt(order.constraints.number_of_swaps_allowed) *
+        SDK.getGasFeeAndCoin(gasFee, (gasPrice * 105n) / 100n, "STRK", 250)[0];
 
-    const approvals: [[SDK.ERC20Token, bigint, SDK.Address]] = [
-      [payCurrency.code as string, requiredApproveToSpend, baseTradeAddress],
-    ];
-    if (
-      gasTokenCurrency.code != payCurrency.code &&
-      gasTokenCurrency.code != receiveCurrency.code
-    ) {
-      approvals.push([gasFee.fee_token, totalGas, baseTradeAddress]);
-    }
-    // check if client already approved executor
-    const is_approved_executor = await coreContract.call(
-      "is_approved_executor",
-      [baseTradeAddress, clientAccount.address.toString()],
-    );
-    const is_approved_snip9 = await executorContract.call(
-      "is_approved_executor",
-      [snip9Address, clientAccount.address.toString()],
-    );
+      const approvals: [[SDK.ERC20Token, bigint, SDK.Address]] = [
+        [payCurrency.code as string, requiredApproveToSpend, baseTradeAddress],
+      ];
+      if (
+        gasTokenCurrency.code != payCurrency.code &&
+        gasTokenCurrency.code != receiveCurrency.code
+      ) {
+        approvals.push([gasFee.fee_token, totalGas, baseTradeAddress]);
+      }
+      // check if client already approved executor
+      const is_approved_executor = await coreContract.call(
+        "is_approved_executor",
+        [baseTradeAddress, clientAccount.address.toString()],
+      );
+      const is_approved_snip9 = await executorContract.call(
+        "is_approved_executor",
+        [snip9Address, clientAccount.address.toString()],
+      );
 
-    const executorApprovals: [SDK.Address, SDK.Address][] = [];
-    if (!is_approved_executor)
-      executorApprovals.push([coreAddress, baseTradeAddress]);
-    if (!is_approved_snip9)
-      executorApprovals.push([baseTradeAddress, snip9Address]);
+      const executorApprovals: [SDK.Address, SDK.Address][] = [];
+      if (!is_approved_executor)
+        executorApprovals.push([coreAddress, baseTradeAddress]);
+      if (!is_approved_snip9)
+        executorApprovals.push([baseTradeAddress, snip9Address]);
 
-    let execOutsidePrimitives;
-    if (!order.sor) {
-      execOutsidePrimitives = SDK.buildExecuteOutsidePrimitives(
-        snip9Contract,
-        order,
-        Object.fromEntries(
-          Object.entries(CURRENCIES).map(([key, currency]) => [
-            key,
-            currency.address,
-          ]),
-        ),
-        routerSignatureResult!.result!,
-        approvals,
-        rollupInvoker,
-        undefined,
-        undefined,
-        executorApprovals,
+      let execOutsidePrimitives;
+      if (!order.sor) {
+        execOutsidePrimitives = SDK.buildExecuteOutsidePrimitives(
+          snip9Contract,
+          order,
+          Object.fromEntries(
+            Object.entries(CURRENCIES).map(([key, currency]) => [
+              key,
+              currency.address,
+            ]),
+          ),
+          routerSignatureResult!.result!,
+          approvals,
+          rollupInvoker,
+          undefined,
+          undefined,
+          executorApprovals,
+        );
+      } else {
+        execOutsidePrimitives = SDK.buildExecuteOutsideSORPrimitives(
+          snip9Contract,
+          order,
+          Object.fromEntries(
+            Object.entries(CURRENCIES).map(([key, currency]) => [
+              key,
+              currency.address,
+            ]),
+          ),
+          routerSignatureResult.result!,
+          approvals,
+          rollupInvoker,
+          undefined,
+          undefined,
+          executorApprovals,
+        );
+      }
+      // normally you need check what snip0 revision is supported
+      order.snip9_call = await SDK.buildOutsideExecuteTransaction(
+        //@ts-ignore
+        clientAccount!,
+        execOutsidePrimitives[0],
+        execOutsidePrimitives[1],
+        execOutsidePrimitives[2],
+        OutsideExecutionVersion.V2,
       );
     } else {
-      execOutsidePrimitives = SDK.buildExecuteOutsideSORPrimitives(
-        snip9Contract,
-        order,
-        Object.fromEntries(
-          Object.entries(CURRENCIES).map(([key, currency]) => [
-            key,
-            currency.address,
-          ]),
-        ),
-        routerSignatureResult.result!,
-        approvals,
-        rollupInvoker,
-        undefined,
-        undefined,
-        executorApprovals,
-      );
+      sign = await signOrder(clientAccount, orderTypedData);
     }
-    // normally you need check what snip0 revision is supported
-    order.snip9_call = await SDK.buildOutsideExecuteTransaction(
-      //@ts-ignore
-      clientAccount!,
-      execOutsidePrimitives[0],
-      execOutsidePrimitives[1],
-      execOutsidePrimitives[2],
-      OutsideExecutionVersion.V2,
-    );
 
-    let sign: SDK.TraderSignature = ["0x0", "0x0"];
     let result: SDK.Result<string> = await routerSDK!.akiraHttp.placeOrder(
       order,
       sign,

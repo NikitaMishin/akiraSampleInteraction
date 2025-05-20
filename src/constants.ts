@@ -141,7 +141,7 @@ export const TOKEN_ORDERING = [
 
 // below likely only stuff to tweak
 
-export const starknetRPC = "https://starknet-sepolia.public.blastapi.io";
+export const starknetRPC = "TODO";
 export const routerSource = "TODO";
 
 export const rpcProvider = new RpcProvider({ nodeUrl: starknetRPC });
