@@ -1,5 +1,5 @@
 import { AccountInterface, Signature, Signer, TypedData } from "starknet";
-import { CURRENCIES, executorAddress } from "./constants";
+import { baseTradeAddress, CURRENCIES, executorAddress } from "./constants";
 import { convertBigIntToString } from "./utils";
 import {
   castToApiSignature,
@@ -35,7 +35,7 @@ export const calcOrderHashAndTypedData = (
       order,
       getDomain(chainHexCode),
       tokenAddressMap,
-      executorAddress,
+      baseTradeAddress,
     ),
   );
 

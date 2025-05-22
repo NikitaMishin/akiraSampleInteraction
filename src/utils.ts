@@ -9,6 +9,9 @@ import {
   wssApiUrl,
 } from "./constants";
 import * as SDK from "layerakira-js";
+import { snapshotProvider } from ".";
+
+const FIXED_DECIMAL_PLACES = 8;
 
 /**
  * Initialize and return an instance of the LayerAkiraSDK client.
@@ -130,32 +133,148 @@ export function bigIntToFormattedDecimal(
 }
 
 /**
- * Cleans the base (<BASE>/<QUOTE> ticker) amount according to the ticker specification
+ * Pads the output string with leading zeros to match the length of the original input.
+ * @param {string} output - The output string to pad.
+ * @param {string} original - The original input string for reference.
+ * @returns {string} - The padded output string.
+ */
+const padOutput = (output: string, original: string) => {
+  const originalParts = original.split(".");
+  const outputParts = output.split(".");
+
+  const paddedIntPart = outputParts[0].padStart(originalParts[0].length, "0");
+
+  let paddedFractionPart = "";
+  if (originalParts.length > 1) {
+    paddedFractionPart =
+      outputParts.length > 1
+        ? outputParts[1].padEnd(originalParts[1].length, "0")
+        : "".padEnd(originalParts[1].length, "0");
+  }
+
+  return originalParts.length > 1
+    ? `${paddedIntPart}.${paddedFractionPart}`
+    : paddedIntPart;
+};
+
+/**
+ * Truncates the decimal part of a number to a fixed number of decimal places.
+ *
+ * @param {string} value - The value to truncate.
+ * @returns {string} - Value with truncated decimals.
+ */
+export const truncateDecimals = (value: string, decimals?: number) => {
+  // Check if the value contains a decimal point
+  const decimalIndex = value.indexOf(".");
+  const decimal = decimals || FIXED_DECIMAL_PLACES;
+
+  if (decimalIndex !== -1) {
+    // Split the value into integer and decimal parts
+    const integerPart = value.substring(0, decimalIndex);
+    let decimalPart = value.substring(decimalIndex + 1);
+
+    // Truncate decimal part to maximum six digits
+    if (decimalPart.length > decimal) {
+      decimalPart = decimalPart.substring(0, decimal);
+    }
+
+    // Return the truncated value
+    return integerPart + "." + decimalPart;
+  }
+
+  // If there's no decimal point, return the original value
+  return value;
+};
+
+/**
+ * Cleans the base amount according to the ticker specification and market levels.
  * @param {Object} params - The parameters for cleaning the base amount.
  * @param {string} params.value - The input value as a string.
  * @param {number} params.decimals - The number of decimals for the base asset.
+ * @param { [bigint, bigint, number][] } params.levels - The market levels (bids or asks).
  * @param {SDK.TickerSpecification} params.spec - The ticker specification.
+ * @param {number} [params.digitsAfterDot=10] - The number of digits after the decimal point to display
+ * @returns {string} - The cleaned base amount as a string.
  */
 export function cleanBaseAmount({
   value,
   decimals,
   spec,
+  digitsAfterDot = 10,
 }: {
-  value: bigint;
+  value: string;
   decimals: number;
+  levels: [bigint, bigint, number][];
   spec: SDK.TickerSpecification;
-}): bigint {
+  digitsAfterDot?: number;
+}): string {
+  const baseAsset = 10n ** BigInt(decimals);
+  const fmtAmount = formattedDecimalToBigInt(value, decimals);
+  if (fmtAmount == 0n) {
+    return truncateDecimals(value);
+  }
+
   let matchableAmount = SDK.getMatchableAmountInBase(
     0n,
     {
-      base_asset: 10n ** BigInt(decimals),
-      base_qty: value,
+      base_asset: baseAsset,
+      base_qty: fmtAmount,
       quote_qty: 0n,
     },
     spec.rawMinQuoteQty,
     false,
     spec.rawQuoteQtyIncrement,
   );
+  console.log("matchable", matchableAmount);
   if (matchableAmount <= 0n) matchableAmount = spec!.rawMinQuoteQty;
-  return matchableAmount;
+  return padOutput(
+    bigIntToFormattedDecimal(matchableAmount, decimals, digitsAfterDot),
+    value,
+  );
+}
+
+/**
+ * Cleans the quote amount according to the market levels.
+ * @param {Object} params - The parameters for cleaning the quote amount.
+ * @param {string} params.value - The input value as a string.
+ * @param {number} params.decimals - The number of decimals for the quote asset.
+ * @returns {string} - The cleaned quote amount as a string.
+ */
+export function cleanQuoteAmount({
+  value,
+  decimals,
+}: {
+  value: string;
+  decimals: number;
+  levels: [bigint, bigint, number][];
+  digitsAfterDot?: number;
+}): string {
+  const fmtAmount = formattedDecimalToBigInt(value, decimals);
+  if (fmtAmount == 0n) {
+    return truncateDecimals(value);
+  }
+  return value;
+}
+
+export function getTickerSpec(
+  externalFunds: boolean,
+  payCurrency: SDK.ERC20Token | undefined,
+  receiveCurrency: SDK.ERC20Token | undefined,
+  tickerSpec: SDK.TickerSpecification[] | undefined,
+): SDK.TickerSpecification | undefined {
+  if (!payCurrency || !receiveCurrency) return undefined;
+
+  const fstTicker = snapshotProvider
+    .getSnapshotPath(payCurrency, receiveCurrency)
+    .value!.at(0)!.ticker;
+  const spec = tickerSpec?.find(
+    (o) =>
+      // TODO: externalFunds bit odd flag
+      // !externalFunds === o.ticker.isEcosystemBook &&
+      (o.ticker.pair.base === fstTicker.base &&
+        o.ticker.pair.quote === fstTicker.quote) ||
+      (o.ticker.pair.base === fstTicker.quote &&
+        o.ticker.pair.quote === fstTicker.base),
+  );
+  return spec;
 }
